@@ -1,0 +1,6 @@
+id=rmnet-netwatch
+name=rmnet-netwatch
+version=1.0
+versionCode=1
+author=gfuzan
+description=自动检测 rmnet_data* 接口可用性并切换 NET_TABLE 默认路由
