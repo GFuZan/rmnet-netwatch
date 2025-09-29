@@ -105,7 +105,7 @@ log "=== rmnet-netwatch started ==="
 while true; do
 
   # 设备休眠, 下一循环
-  if [ $(service call power 12 | awk '{print $(NF-1)}') -eq 0 ]; then
+  if [ $(service call power 12 | awk '{print $(NF-1)}') -eq 0 ] 2>/dev/null; then
       sleep "$SLEEP_INTERVAL"
       continue
   fi
