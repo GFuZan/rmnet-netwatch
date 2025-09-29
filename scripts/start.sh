@@ -103,6 +103,13 @@ chmod 644 "$LOG"
 # Main loop
 log "=== rmnet-netwatch started ==="
 while true; do
+
+  # 设备休眠, 下一循环
+  if [ $(service call power 12 | awk '{print $(NF-1)}') -eq 0 ]; then
+      sleep "$SLEEP_INTERVAL"
+      continue
+  fi
+
   NET_TABLE=$(get_net_table)
   if [ -z "$NET_TABLE" ]; then
     log "没有找到 NET_TABLE，稍后重试"
