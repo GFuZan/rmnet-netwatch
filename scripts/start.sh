@@ -9,6 +9,8 @@ LOGDIR="/data/local/tmp"
 LOG="$LOGDIR/net-switch.log"
 PING_TARGET="www.baidu.com"
 SLEEP_INTERVAL=5
+# 默认最大固定可用数据接口(不包含上网接口)
+MAX_RMNET_DATA=3
 
 log() {
   ts=$(date +"%F %T")
@@ -23,14 +25,23 @@ get_net_table() {
 
 # Helper: list all rmnet_data interfaces appearing in ip route show
 list_rmnet_ifaces() {
-  echo "$ROUTES" | awk '
+  echo "$ROUTES" | awk -v max="$MAX_RMNET_DATA" '
     {
-      for(i=1;i<=NF;i++) {
-        if ($i=="dev" && $(i+1) ~ /^rmnet_data[0-9]+$/) {
-          print $(i+1)
+      for (i = 1; i < NF; i++) {
+        iface = $(i+1)
+        if ($i == "dev" && iface ~ /^rmnet_data[0-9]+$/) {
+          num = substr(iface, 11)
+          if (num + 0 <= max && !(iface in seen)) {
+            seen[iface] = 1
+            list[++count] = iface
+          }
         }
       }
-    }' | sort -ru
+    }
+    END {
+      # 倒序输出
+      for (i = count; i >= 1; i--) print list[i]
+    }'
 }
 
 # Helper: get gateway for a given interface
