@@ -5,12 +5,20 @@
 # 日志: /data/adb/modules/rmnet-netwatch/net-switch.log
 
 MODDIR=${0%/*}
-LOGDIR="/data/local/tmp"
-LOG="$LOGDIR/net-switch.log"
-PING_TARGET="www.baidu.com"
-SLEEP_INTERVAL=5
-# 默认最大固定可用数据接口(不包含上网接口)
-MAX_RMNET_DATA=3
+
+# Load configuration
+CONFIG_FILE="$MODDIR/config.conf"
+if [ -f "$CONFIG_FILE" ]; then
+  . "$CONFIG_FILE"
+else
+  # Fallback to default values if config file doesn't exist
+  LOGDIR="/data/local/tmp"
+  LOG="$LOGDIR/net-switch.log"
+  PING_TARGET="www.baidu.com"
+  SLEEP_INTERVAL=5
+  # 默认最大固定可用数据接口(不包含上网接口)
+  MAX_RMNET_DATA=3
+fi
 
 log() {
   ts=$(date +"%F %T")
