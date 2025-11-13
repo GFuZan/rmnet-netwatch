@@ -16,8 +16,10 @@ else
   LOG="$LOGDIR/net-switch.log"
   PING_TARGET="www.baidu.com"
   SLEEP_INTERVAL=5
-  # 默认最大固定可用数据接口(不包含上网接口)
+  # 最大允许的 rmnet_data 接口编号（例如，如果设置为 3，则只处理 rmnet_data0 到 rmnet_data3）
   MAX_RMNET_DATA=3
+  # 最小允许的 rmnet_data 接口编号（例如，如果设置为 1，则只处理编号 >= 1 的接口）
+  MIN_RMNET_DATA=0
 fi
 
 log() {
@@ -33,13 +35,13 @@ get_net_table() {
 
 # Helper: list all rmnet_data interfaces appearing in ip route show
 list_rmnet_ifaces() {
-  echo "$ROUTES" | awk -v max="$MAX_RMNET_DATA" '
+  echo "$ROUTES" | awk -v max="$MAX_RMNET_DATA" -v min="$MIN_RMNET_DATA" '
     {
       for (i = 1; i < NF; i++) {
         iface = $(i+1)
         if ($i == "dev" && iface ~ /^rmnet_data[0-9]+$/) {
           num = substr(iface, 11)
-          if (num + 0 <= max && !(iface in seen)) {
+          if (num + 0 >= min && num + 0 <= max && !(iface in seen)) {
             seen[iface] = 1
             list[++count] = iface
           }
