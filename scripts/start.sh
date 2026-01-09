@@ -6,41 +6,55 @@
 
 MODDIR=${0%/*}
 
-# Load configuration
 CONFIG_FILE="$MODDIR/config.conf"
-if [ -f "$CONFIG_FILE" ]; then
-  . "$CONFIG_FILE"
-else
-  # Fallback to default values if config file doesn't exist
-  LOGDIR="/data/local/tmp"
-  LOG="$LOGDIR/net-switch.log"
-  PING_TARGET="www.baidu.com"
-  SLEEP_INTERVAL=5
-  # 最大允许的 rmnet_data 接口编号（例如，如果设置为 3，则只处理 rmnet_data0 到 rmnet_data3）
-  MAX_RMNET_DATA=3
-  # 最小允许的 rmnet_data 接口编号（例如，如果设置为 1，则只处理编号 >= 1 的接口）
-  MIN_RMNET_DATA=0
-fi
+CONFIG_MTIME=""  # 存储配置文件修改时间
+
+load_config() {
+  if [ -f "$CONFIG_FILE" ]; then
+    . "$CONFIG_FILE"
+  else
+    LOGDIR="/data/local/tmp"
+    LOG="$LOGDIR/net-switch.log"
+    PING_TARGET="www.baidu.com"
+    ENT_NAME=rmnet_data
+    SLEEP_INTERVAL=5
+    MAX_RMNET_DATA=3
+    MIN_RMNET_DATA=0
+    CONFIG_MTIME=""
+  fi
+}
+
+check_config_reload() {
+  if [ -f "$CONFIG_FILE" ]; then
+    current_mtime=$(stat -c %Y "$CONFIG_FILE" 2>/dev/null || stat -f %m "$CONFIG_FILE" 2>/dev/null)
+    if [ "$current_mtime" != "$CONFIG_MTIME" ]; then
+      # 更新配置文件修改时间
+      CONFIG_MTIME=$current_mtime
+      log "检测到配置文件更新，重新加载配置"
+      load_config
+    fi
+  fi
+}
+
+load_config
 
 log() {
   ts=$(date +"%F %T")
   echo "[$ts] $*" >> "$LOG"
 }
 
-# Helper: get last rmnet_data* name from ip rules
 get_net_table() {
-  # 找最后一个包含 "lookup rmnet_data" 的名字
-  ip rule show 2>/dev/null | awk '/lookup rmnet_data/ {name=$NF} END{print name}'
+  t_name=$(ip rule show 2>/dev/null | awk '/lookup / {name=$NF} END{print name}')
+  [ -n "$t_name" ] && echo "$t_name" | grep -q "^$ENT_NAME" && echo "$t_name"
 }
 
-# Helper: list all rmnet_data interfaces appearing in ip route show
 list_rmnet_ifaces() {
-  echo "$ROUTES" | awk -v max="$MAX_RMNET_DATA" -v min="$MIN_RMNET_DATA" '
+  echo "$ROUTES" | awk -v max="$MAX_RMNET_DATA" -v min="$MIN_RMNET_DATA" -v ent_name="$ENT_NAME" '
     {
       for (i = 1; i < NF; i++) {
         iface = $(i+1)
-        if ($i == "dev" && iface ~ /^rmnet_data[0-9]+$/) {
-          num = substr(iface, 11)
+        if ($i == "dev" && iface ~ ("^" ent_name "[0-9]+$")) {
+          num = substr(iface, length(ent_name) + 1)
           if (num + 0 >= min && num + 0 <= max && !(iface in seen)) {
             seen[iface] = 1
             list[++count] = iface
@@ -54,7 +68,6 @@ list_rmnet_ifaces() {
     }'
 }
 
-# Helper: get gateway for a given interface
 get_gateway_for_iface() {
   iface="$1"
   line=$(echo "$ROUTES" | grep "dev $iface " | head -n1)
@@ -92,7 +105,6 @@ EOF
   echo "$gw_ip"
 }
 
-# Helper: get default route's dev and gw from a table (NET_TABLE may be name or number)
 get_default_in_table() {
   table="$1"
   ip route show table "$table" 2>/dev/null | awk '
@@ -107,7 +119,6 @@ get_default_in_table() {
     }'
 }
 
-# Ping check: try domain first, then fallback IP. Use -I iface (if supported)
 check_iface_connectivity() {
   iface="$1"
   if ping -c 1 -W 1 -I "$iface" "$PING_TARGET" >/dev/null 2>&1; then
@@ -116,7 +127,6 @@ check_iface_connectivity() {
   return 1
 }
 
-# Safe: ensure log exists and permissions
 mkdir -p "$LOGDIR"
 : > "$LOG"
 chmod 644 "$LOG"
@@ -130,6 +140,8 @@ while true; do
       sleep "$SLEEP_INTERVAL"
       continue
   fi
+
+  check_config_reload
 
   NET_TABLE=$(get_net_table)
   if [ -z "$NET_TABLE" ]; then
