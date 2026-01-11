@@ -1,13 +1,9 @@
 #!/system/bin/sh
-# service.sh - Magisk module service script
-# 自动检测 rmnet_data* 接口并把 NET_TABLE 的 default route 切换到可用的接口+gateway
-# 放在 /data/adb/modules/rmnet-netwatch/service.sh 并 chmod 0755
-# 日志: /data/adb/modules/rmnet-netwatch/net-switch.log
 
 MODDIR=${0%/*}
 
 CONFIG_FILE="$MODDIR/config.conf"
-CONFIG_MTIME=""  # 存储配置文件修改时间
+CONFIG_MTIME=""
 
 load_config() {
   if [ -f "$CONFIG_FILE" ]; then
@@ -28,7 +24,6 @@ check_config_reload() {
   if [ -f "$CONFIG_FILE" ]; then
     current_mtime=$(stat -c %Y "$CONFIG_FILE" 2>/dev/null || stat -f %m "$CONFIG_FILE" 2>/dev/null)
     if [ "$current_mtime" != "$CONFIG_MTIME" ]; then
-      # 更新配置文件修改时间
       CONFIG_MTIME=$current_mtime
       log "检测到配置文件更新，重新加载配置"
       load_config
@@ -63,7 +58,6 @@ list_rmnet_ifaces() {
       }
     }
     END {
-      # 倒序输出
       for (i = count; i >= 1; i--) print list[i]
     }'
 }
@@ -73,33 +67,26 @@ get_gateway_for_iface() {
   line=$(echo "$ROUTES" | grep "dev $iface " | head -n1)
   [ -z "$line" ] && return
 
-  # 如果有 "via" 字段，直接用
   gw=$(echo "$line" | awk '{for(i=1;i<=NF;i++) if($i=="via") print $(i+1)}')
   if [ -n "$gw" ]; then
     echo "$gw"
     return
   fi
 
-  # 提取 network 和 prefix
   net=$(echo "$line" | awk '{print $1}')
 
-  # 否则计算 network+1
   ip=$(echo "$net" | cut -d/ -f1)
   prefix=$(echo "$net" | cut -d/ -f2)
 
-  # 把 IPv4 转换为十进制
   IFS=. read -r o1 o2 o3 o4 <<EOF
 $ip
 EOF
   dec=$(( (o1<<24) + (o2<<16) + (o3<<8) + o4 ))
 
-  # 掩码
   mask=$(( 0xFFFFFFFF << (32-prefix) & 0xFFFFFFFF ))
 
-  # network
   net_dec=$(( dec & mask ))
 
-  # gateway = network+1
   gw_dec=$(( net_dec + 1 ))
   gw_ip="$(( (gw_dec>>24)&255 )).$(( (gw_dec>>16)&255 )).$(( (gw_dec>>8)&255 )).$(( gw_dec&255 ))"
   echo "$gw_ip"
@@ -131,11 +118,9 @@ mkdir -p "$LOGDIR"
 : > "$LOG"
 chmod 644 "$LOG"
 
-# Main loop
 log "=== rmnet-netwatch started ==="
 while true; do
 
-  # 设备休眠, 下一循环
   if [ $(service call power 12 | awk '{print $(NF-1)}') -eq 0 ] 2>/dev/null; then
       sleep "$SLEEP_INTERVAL"
       continue
@@ -150,11 +135,11 @@ while true; do
     continue
   fi
 
-  # 缓存 ip route show 的结果
   ROUTES=$(ip route show 2>/dev/null)
 
   for IFACE in $(list_rmnet_ifaces); do
     [ -z "$IFACE" ] && continue
+    [ "$IFACE" = "$NET_TABLE" ] && continue
     GW=$(get_gateway_for_iface "$IFACE")
     if [ -z "$GW" ]; then
       log "接口 $IFACE 未找到网关，跳过"
