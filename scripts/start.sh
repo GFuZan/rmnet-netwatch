@@ -8,10 +8,12 @@ CONFIG_MTIME=""
 load_config() {
   if [ -f "$CONFIG_FILE" ]; then
     . "$CONFIG_FILE"
+    mkdir -p "$LOGDIR"
+    : > "$LOG"
   else
     LOGDIR="/data/local/tmp"
     LOG="$LOGDIR/net-switch.log"
-    PING_TARGET="www.baidu.com"
+    TEST_TARGET="http://www.baidu.com"
     ENT_NAME=rmnet_data
     SLEEP_INTERVAL=5
     MAX_RMNET_DATA=3
@@ -22,16 +24,14 @@ load_config() {
 
 check_config_reload() {
   if [ -f "$CONFIG_FILE" ]; then
-    current_mtime=$(stat -c %Y "$CONFIG_FILE" 2>/dev/null || stat -f %m "$CONFIG_FILE" 2>/dev/null)
-    if [ "$current_mtime" != "$CONFIG_MTIME" ]; then
-      CONFIG_MTIME=$current_mtime
-      log "检测到配置文件更新，重新加载配置"
+    current_mtime=$(stat -c %Y "$CONFIG_FILE" 2>/dev/null)
+    if [ -n "$CONFIG_MTIME" ] && [ "$current_mtime" != "$CONFIG_MTIME" ]; then
       load_config
+      log "检测到配置文件更新，重新加载配置"
     fi
+    CONFIG_MTIME=$current_mtime
   fi
 }
-
-load_config
 
 log() {
   ts=$(date +"%F %T")
@@ -63,8 +63,7 @@ list_rmnet_ifaces() {
 }
 
 get_gateway_for_iface() {
-  iface="$1"
-  line=$(echo "$ROUTES" | grep "dev $iface " | head -n1)
+  line=$(echo "$ROUTES" | grep "dev $1 " | head -n1)
   [ -z "$line" ] && return
 
   gw=$(echo "$line" | awk '{for(i=1;i<=NF;i++) if($i=="via") print $(i+1)}')
@@ -93,8 +92,7 @@ EOF
 }
 
 get_default_in_table() {
-  table="$1"
-  ip route show table "$table" 2>/dev/null | awk '
+  ip route show table "$1" 2>/dev/null | awk '
     /^default/ {
       gw="-"; dev="-";
       for(i=1;i<=NF;i++){
@@ -107,18 +105,14 @@ get_default_in_table() {
 }
 
 check_iface_connectivity() {
-  iface="$1"
-  if ping -c 1 -W 1 -I "$iface" "$PING_TARGET" >/dev/null 2>&1; then
+  if curl -s --connect-timeout 3 --interface "$1" "$TEST_TARGET" >/dev/null 2>&1; then
     return 0
   fi
   return 1
 }
 
-mkdir -p "$LOGDIR"
-: > "$LOG"
-chmod 644 "$LOG"
+load_config
 
-log "=== rmnet-netwatch started ==="
 while true; do
 
   if [ $(service call power 12 | awk '{print $(NF-1)}') -eq 0 ] 2>/dev/null; then
@@ -149,6 +143,7 @@ while true; do
     read cur_dev cur_gw <<EOF
 $(get_default_in_table "$NET_TABLE")
 EOF
+
     [ -z "$cur_dev" ] && cur_dev="-"
     [ -z "$cur_gw" ] && cur_gw="-"
 
