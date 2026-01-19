@@ -13,7 +13,7 @@ load_config() {
   else
     LOGDIR="/data/local/tmp"
     LOG="$LOGDIR/net-switch.log"
-    TEST_TARGET="http://www.baidu.com"
+    PING_TARGET="www.baidu.com"
     ENT_NAME=rmnet_data
     SLEEP_INTERVAL=5
     MAX_RMNET_DATA=3
@@ -105,7 +105,7 @@ get_default_in_table() {
 }
 
 check_iface_connectivity() {
-  if curl -s --connect-timeout 3 --interface "$1" "$TEST_TARGET" >/dev/null 2>&1; then
+  if ping -c 1 -W 1 -I "$1" "$PING_TARGET" >/dev/null 2>&1; then
     return 0
   fi
   return 1
