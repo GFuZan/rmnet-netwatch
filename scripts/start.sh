@@ -4,12 +4,16 @@ MODDIR=${0%/*}
 
 CONFIG_FILE="$MODDIR/config.conf"
 CONFIG_MTIME=""
+LOG_INITIALIZED=0
 
 load_config() {
   if [ -f "$CONFIG_FILE" ]; then
     . "$CONFIG_FILE"
     mkdir -p "$LOGDIR"
-    : > "$LOG"
+    if [ "$LOG_INITIALIZED" -eq 0 ]; then
+      : > "$LOG"
+      LOG_INITIALIZED=1
+    fi
   else
     LOGDIR="/data/local/tmp"
     LOG="$LOGDIR/net-switch.log"
@@ -105,7 +109,7 @@ get_default_in_table() {
 }
 
 check_iface_connectivity() {
-  if ping -c 1 -W 1 -I "$1" "$PING_TARGET" >/dev/null 2>&1; then
+  if su shell ping -c 1 -W 1 -I "$1" "$PING_TARGET" >/dev/null 2>&1; then
     return 0
   fi
   return 1
